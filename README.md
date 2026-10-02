@@ -12,7 +12,7 @@ enforced by database policies rather than by the browser.
 
 ## Status
 
-**Verified against a real database.** All eight migrations apply cleanly from an
+**Verified against a real database.** All seven migrations apply cleanly from an
 empty database, and 81 automated assertions pass against a live Supabase stack
 with real sessions and real RLS — 42 exercising the HTTP/RLS boundary directly,
 39 driving the actual `src/lib/db/*` modules through Vite's SSR transform.
@@ -21,9 +21,14 @@ Four real bugs were found by running things rather than reading them. See
 [Verified behaviour](#verified-behaviour) and
 [Bugs found by testing](#bugs-found-by-testing).
 
-**The schema has not been applied to the hosted project**
-`xccvbblyrwbyjlstaukn` yet — it is still completely empty. That is the one
-remaining step, and it needs a Supabase CLI login or the database password. See
+**The schema is live on the hosted project** `xccvbblyrwbyjlstaukn`. All seven
+migrations were applied via the connection pooler and then re-verified over the
+public Data API: `public_posts` and `community_stats` return `200`, while
+`posts`, `profiles`, `reports`, `moderation_logs` and `admin_dashboard_stats`
+all return `42501` to `anon`. The demo seed was deliberately excluded, so the
+wall is legitimately empty until real submissions arrive.
+
+**No moderator exists yet.** Promote one after signing up — see
 [Apply the schema to production](#apply-the-schema-to-production).
 
 ---
@@ -77,21 +82,52 @@ Then apply the same migrations to the hosted project — see
 | `0002_constraints_indexes.sql` | Content length limits, trigram + status indexes |
 | `0003_functions_triggers.sql` | `is_admin()`, profile bootstrap, **the guards that stop a student self-publishing** |
 | `0004_rls_policies.sql` | Row Level Security on every table, plus the `public_posts` view |
-| `0005_seed.sql` | Dev-only demo accounts and sample notes |
 | `0006_dashboard_stats.sql` | Admin-only aggregate used by the dashboard |
 | `0007_community_stats.sql` | Public aggregate used by the home page |
 | `0008_hardening.sql` | Parameterless `is_admin()`, Realtime publication, grant hygiene |
 
-`0005_seed.sql` self-skips on any database whose name does not look like a local
-or dev one. To force it, run `set app.allow_seed = 'on';` first. It writes to
-`auth.users`, so on a hosted project run it from the Dashboard's SQL editor rather
-than `psql`. Do not seed a production database.
+Note the gap at `0005`. That file used to be `0005_seed.sql` and was moved out to
+`supabase/seed.sql`; nothing was applied from the old numbering on any hosted
+project, so removing it left no hole in anyone's migration history.
+
+### The demo seed, and why it is not a migration
+
+`supabase/seed.sql` creates `admin@kindnesswall.test` and
+`student@kindnesswall.test`, both with the password `demo-password-123`, plus
+sample notes and reports.
+
+It is **not** in `supabase/migrations/`, and the reason matters. It was there
+originally, behind a `do $$ ... return; $$` guard that was meant to stop it
+running on a real database. That guard did not work, for two independent
+reasons:
+
+1. It allowed any database named like `%dev%`, `%local%` **or `%postgres%`** —
+   and the hosted project calls its database `postgres` too, so production would
+   have passed the check.
+2. `return` inside a standalone `DO` block exits only that block. Every `insert`
+   below it is a separate top-level statement and ran anyway.
+
+File location is the control that actually works. `supabase db reset` applies
+`seed.sql` after the migrations, so local development still gets demo data.
+`supabase db push` only ever applies `supabase/migrations/*.sql`, and sends this
+file solely if someone passes `--include-seed` deliberately.
 
 ### Apply the schema to production
 
-The hosted project is empty, so this is the one step still outstanding. It
-requires a Supabase CLI login (or the database password) — the publishable key in
-`.env` cannot create tables.
+Done — all seven migrations are live. This is the command that did it:
+
+```bash
+# The direct hostname db.<ref>.supabase.co is IPv6-only, which fails on
+# machines without real IPv6. The pooler is IPv4 and works everywhere.
+npx supabase db push --db-url \
+  "postgresql://postgres.<PROJECT_REF>:<URL_ENCODED_PASSWORD>@aws-0-<REGION>.pooler.supabase.com:5432/postgres"
+```
+
+`--db-url` needs no `supabase login`. Prefer `npx supabase login` + `link` when
+you have a working token. Note the seed is **not** applied — production should
+start empty.
+
+If you re-run this on a machine that does have IPv6:
 
 ```bash
 npx supabase login
@@ -105,9 +141,23 @@ Then confirm the result:
 npm run db:probe   # read-only GETs against whatever project .env points at
 ```
 
-The probe prints `200` for `/auth/v1/health` and `200` with rows for
-`/rest/v1/public_posts`. If it still reports `PGRST205 Could not find the table`,
-the migrations did not land.
+The probe is read-only. On the hosted project it should now print:
+
+| Request | Expected |
+| --- | --- |
+| `GET /auth/v1/health` | `200` |
+| `GET /rest/v1/public_posts` | `200` — `[]` on production, since the seed is excluded |
+| `GET /rest/v1/posts` | `42501` permission denied |
+| `GET /rest/v1/profiles` | `42501` permission denied |
+| `GET /rest/v1/reports` | `42501` permission denied |
+| `GET /rest/v1/moderation_logs` | `42501` permission denied |
+| `GET /rest/v1/rpc/community_stats` | `200` with zeroed counters |
+| `GET /rest/v1/rpc/admin_dashboard_stats` | `42501` permission denied |
+
+Those `42501`s are the point, not a failure. `anon` being unable to touch the
+base tables is what forces all public reads through `public_posts`. If
+`public_posts` still reports `PGRST205 Could not find the table`, the migrations
+did not land.
 
 ### 4. Create the first moderator
 
@@ -199,7 +249,8 @@ is what `byStatus.reported` in the store derives. Hiding a note is `removed`, an
 ## Layout
 
 ```
-supabase/migrations/   Schema, functions, RLS policies, seed, hardening
+supabase/migrations/   Schema, functions, RLS policies, hardening
+supabase/seed.sql      Demo accounts and sample notes — local only, never pushed
 scripts/               Verification suites (see Verified behaviour)
 src/lib/supabase.js    Client construction + isConfigured guard
 src/lib/db/            One module per resource: posts, reports, moderation, stats, auth
@@ -237,7 +288,7 @@ tests the code that actually ships.
 
 Confirmed against a live database:
 
-- All eight migrations apply from empty, in order, with no errors.
+- All seven migrations apply from empty, in order, with no errors.
 - Signup creates a `profiles` row with `role = 'student'`, via the trigger.
 - A student posting `status: "published"` **and** someone else's `author_id` gets
   a row that is silently rewritten to `pending` / `auth.uid()`.
@@ -292,15 +343,22 @@ or report. It now routes by role instead.
 
 ## Still outstanding
 
-- **The hosted project has no schema.** See
-  [Apply the schema to production](#apply-the-schema-to-production). Nothing in
-  the app works against `xccvbblyrwbyjlstaukn` until that is done.
+- **No moderator account exists.** Sign up through `/admin/signup`, then promote the
+  profile. Until then `/admin/login` works but has nothing to log into:
+
+  ```sql
+  update public.profiles set role = 'admin' where id = (
+    select id from auth.users where email = 'you@school.org'
+  );
+  ```
+
+  Run it in the hosted project's Dashboard → SQL Editor. Do not promote by
+  inserting into `auth.users` by hand.
+- **Rotate the database password.** It was shared in a chat transcript while
+  deploying, so treat it as exposed. Settings → Database in the hosted dashboard.
 - **No browser-rendered check.** Everything above exercises the data layer. The
   React components have been verified by `npm run build` and by reading, not by
   driving a real browser, so layout and interaction are unproven.
-- **The seed is dev-only** and creates `admin@kindnesswall.test` /
-  `student@kindnesswall.test` with password `demo-password-123`. It will not run on
-  a production database; delete these accounts if you ever force it to.
 - **Students cannot edit a pending note in the UI.** `updatePostContent` and the
   guard trigger permit it while a note is pending, but there is no student `UPDATE`
   policy on `posts` and no editor surface. Treat it as unavailable until both exist.
