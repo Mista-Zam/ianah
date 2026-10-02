@@ -1,0 +1,7 @@
+* text=auto
+
+# Keep SQL and scripts on LF regardless of the checkout platform. SQL is fed
+# straight to Postgres by `supabase db push`, and a stray CRLF inside a
+# DO block or dollar-quoted function body is a needless source of churn.
+*.sql text eol=lf
+*.mjs text eol=lf
