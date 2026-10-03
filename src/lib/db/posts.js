@@ -1,21 +1,18 @@
 import { supabase, unwrap, isConfigured } from "../supabase.js";
-import { mapPublicPost, mapModerationPost, toDbCategory } from "../mappers.js";
+import { mapPublicPost, mapModerationPost } from "../mappers.js";
 
 /**
  * The public wall reads through the `public_posts` view rather than the `posts`
  * table, because RLS operates on rows and cannot hide a column. The view is what
  * guarantees an anonymous note's author_id never reaches the browser.
  */
-export async function fetchPublicPosts({ category, search, limit = 200 } = {}) {
+export async function fetchPublicPosts({ search, limit = 200 } = {}) {
   if (!isConfigured) return [];
 
   let query = supabase
     .from("public_posts")
-    .select("id, content, category, note_color, is_anonymous, created_at, updated_at, display_name");
+    .select("id, content, recipient, note_color, is_anonymous, created_at, updated_at, display_name");
 
-  if (category && category !== "all") {
-    query = query.eq("category", toDbCategory(category));
-  }
   if (search?.trim()) {
     // The trigram index on posts.content supports this ilike.
     query = query.ilike("content", `%${search.trim()}%`);
@@ -35,7 +32,7 @@ export async function fetchPostsForModeration(statuses) {
 
   let query = supabase
     .from("posts")
-    .select("id, content, category, note_color, is_anonymous, status, created_at, updated_at, reviewed_at, reviewed_by, rejection_reason");
+    .select("id, content, recipient, note_color, is_anonymous, status, created_at, updated_at, reviewed_at, reviewed_by, rejection_reason");
 
   if (statuses?.length) query = query.in("status", statuses);
 
@@ -92,25 +89,32 @@ async function fetchReportReasons(postIds) {
 }
 
 /**
- * Submit a note. The status column is deliberately omitted: the database forces
- * `pending` for any non-admin insert, so the client cannot publish its own note.
+ * Submit a note. No account is required.
+ *
+ * Goes through the `submit_note` RPC rather than a table insert, for two reasons.
+ * First, anon has no INSERT privilege on `posts` at all. Second, returning the
+ * inserted row would mean either granting anon SELECT — which would expose
+ * author_id and de-anonymise every note — or using `.insert().select()`, which
+ * makes PostgREST run exactly that SELECT. So the RPC returns only the new id.
+ *
+ * Nothing identifying is sent, because nothing identifying is accepted. The
+ * database hardcodes is_anonymous true and author_id NULL inside the function, and
+ * the status is set by a trigger, so a tampered request cannot publish its own
+ * note or attach a name to it.
+ *
+ * @returns {Promise<string>} the new note id
  */
-export async function insertPost({ content, category, color, anonymous }) {
+export async function insertPost({ content, recipient, color }) {
   if (!isConfigured) throw new Error("Supabase is not configured.");
 
-  const { data, error } = await supabase
-    .from("posts")
-    .insert({
-      content: content.trim(),
-      category: toDbCategory(category),
-      note_color: color,
-      is_anonymous: Boolean(anonymous),
-    })
-    .select("id, content, category, note_color, is_anonymous, status, created_at, updated_at")
-    .single();
+  const { data, error } = await supabase.rpc("submit_note", {
+    p_content: content.trim(),
+    p_recipient: recipient?.trim() || null,
+    p_note_color: color,
+  });
 
   if (error) throw new Error(friendlyPostError(error.message));
-  return mapModerationPost(data);
+  return data;
 }
 
 /** Edit your own note. Only allowed while it is still pending (enforced in SQL). */
@@ -121,7 +125,7 @@ export async function updatePostContent(postId, content) {
     .from("posts")
     .update({ content: content.trim() })
     .eq("id", postId)
-    .select("id, content, category, note_color, is_anonymous, status, created_at, updated_at, reviewed_at, reviewed_by, rejection_reason")
+    .select("id, content, recipient, note_color, is_anonymous, status, created_at, updated_at, reviewed_at, reviewed_by, rejection_reason")
     .single();
 
   if (error) throw new Error(error.message);
@@ -175,6 +179,9 @@ function friendlyPostError(message = "") {
   if (text.includes("violates row level security")) return "You do not have permission to do that.";
   if (text.includes("violates check constraint") && text.includes("content")) {
     return "That note is empty or longer than 600 characters.";
+  }
+  if (text.includes("violates check constraint") && text.includes("recipient")) {
+    return "That recipient name is too long.";
   }
   if (text.includes("already been reviewed")) {
     return "A moderator has already reviewed this note.";

@@ -1,7 +1,7 @@
 import { CalendarClock, Flag, Tag, UserRound } from "lucide-react";
 import NotePreview from "../NotePreview";
 import StatusBadge from "../ui/StatusBadge";
-import { CATEGORY_LABEL } from "../../lib/constants";
+
 import { formatDateTime } from "../../lib/format";
 
 /**
@@ -45,10 +45,12 @@ export default function ModerationCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={post.status} size="sm" />
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-2 px-2.5 py-1 text-[0.6875rem] font-bold text-muted">
-              <Tag size={11} aria-hidden="true" />
-              {CATEGORY_LABEL[post.category] ?? "Random"}
-            </span>
+            {post.recipient && (
+              <span className="inline-flex max-w-[12rem] items-center gap-1.5 rounded-full border border-line bg-surface-2 px-2.5 py-1 text-[0.6875rem] font-bold text-muted">
+                <Tag size={11} aria-hidden="true" />
+                <span className="truncate">{post.recipient}</span>
+              </span>
+            )}
             {post.reportCount > 0 && (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/35 bg-brand/12 px-2.5 py-1 text-[0.6875rem] font-bold text-brand-soft">
                 <Flag size={11} aria-hidden="true" />

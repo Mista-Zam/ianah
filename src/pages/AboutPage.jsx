@@ -44,10 +44,10 @@ const VALUES = [
 ];
 
 const STEPS = [
-  { step: "01", title: "Write your note", body: "Say the thing you actually want to say — thanks, a win, a frustration or a bit of encouragement." },
-  { step: "02", title: "Choose a colour and category", body: "Pick the note colour that feels right, and file it where it belongs." },
-  { step: "03", title: "Submit for review", body: "Your note goes to the moderation queue — it is not published automatically." },
-  { step: "04", title: "A moderator reads it", body: "A human checks every submission for kindness and relevance." },
+  { step: "01", title: "Name who it is for", body: "Add the teacher's name if you want them to know the note was meant for them. Leave it blank to write to everyone." },
+  { step: "02", title: "Write your note", body: "Say the thing you actually want to say — thanks, a win, a frustration or a bit of encouragement." },
+  { step: "03", title: "Choose a colour and submit", body: "Pick the note colour that feels right, then send it to the moderation queue." },
+  { step: "04", title: "A moderator reads it", body: "A human checks every submission for kindness and relevance. It is not published automatically." },
   { step: "05", title: "Approved notes go live", body: "Once approved, your note appears on the Kindness Wall as 'Posted anonymously'." },
 ];
 

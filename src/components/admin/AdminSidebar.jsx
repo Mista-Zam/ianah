@@ -8,6 +8,7 @@ import {
   ShieldX,
   Clock3,
   LogOut,
+  UserPlus,
   X,
 } from "lucide-react";
 import { useWall } from "../../store/wallContext";
@@ -19,6 +20,7 @@ const LINKS = [
   { to: "/admin/rejected", label: "Rejected", icon: ShieldX, badge: null },
   { to: "/admin/reported", label: "Reported", icon: Flag, badge: "reported" },
   { to: "/admin/logs", label: "Moderation Logs", icon: ScrollText, badge: null },
+  { to: "/admin/moderators", label: "Moderators", icon: UserPlus, badge: null },
   { to: "/admin/settings", label: "Settings", icon: Settings, badge: null },
 ];
 

@@ -2,13 +2,23 @@ import { supabase, unwrap, isConfigured } from "../supabase.js";
 import { mapReport } from "../mappers.js";
 import { friendlyPostError, assertRowsChanged } from "./posts.js";
 
-/** File a report. The unique (post_id, reporter_id) constraint stops duplicates. */
+/**
+ * File a report. Anyone can do this without an account.
+ *
+ * Goes through the `submit_report` RPC rather than a table insert. Two reasons:
+ * anon has no INSERT privilege on `reports` at all, and the RPC returns only the
+ * new id so no column of the row is echoed back. The unique index on
+ * (post_id, reporter_id) — plus its anonymous counterpart on post_id alone —
+ * still rejects duplicates.
+ */
 export async function insertReport(postId, reason, details = null) {
   if (!isConfigured) throw new Error("Supabase is not configured.");
 
-  const { error } = await supabase
-    .from("reports")
-    .insert({ post_id: postId, reason, details: details?.trim() || null });
+  const { error } = await supabase.rpc("submit_report", {
+    p_post_id: postId,
+    p_reason: reason,
+    p_details: details?.trim() || null,
+  });
 
   if (error) throw new Error(friendlyPostError(error.message));
 }
@@ -37,7 +47,7 @@ export async function fetchReports({ status = "pending" } = {}) {
   if (postIds.length) {
     const { data: postRows, error } = await supabase
       .from("posts")
-      .select("id, content, category, note_color, is_anonymous, status, created_at, updated_at, reviewed_at, reviewed_by, rejection_reason")
+      .select("id, content, recipient, note_color, is_anonymous, status, created_at, updated_at, reviewed_at, reviewed_by, rejection_reason")
       .in("id", postIds);
     if (!error) {
       postRows.forEach((row) => postsById.set(row.id, row));

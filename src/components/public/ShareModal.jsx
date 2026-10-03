@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -13,22 +12,22 @@ import {
 import Modal from "../ui/Modal";
 import Button from "../ui/Button";
 import { useWall } from "../../store/wallContext";
-import { MAX_THOUGHT_LENGTH, NOTE_COLORS, POST_CATEGORIES, CATEGORY_LABEL } from "../../lib/constants";
+import { MAX_RECIPIENT_LENGTH, MAX_THOUGHT_LENGTH, NOTE_COLORS } from "../../lib/constants";
 
 /**
- * Share flow: write → choose colour + category → submit for review.
+ * Share flow: name a recipient → write → choose colour → submit for review.
  * Submissions never appear on the wall directly; a moderator approves them first.
  *
- * The status column is never sent — the database forces `pending` for any non-admin
- * insert, so a tampered request cannot publish its own note.
+ * Nothing here identifies the writer. `author_id` stays null and the database
+ * forces `pending` for any non-admin insert, so a tampered request cannot
+ * publish its own note or attribute it to somebody else.
  */
 export default function ShareModal({ open, onClose, onDone }) {
-  const { actions, user, isConfigured } = useWall();
+  const { actions, isConfigured } = useWall();
   const [step, setStep] = useState("form");
+  const [recipient, setRecipient] = useState("");
   const [text, setText] = useState("");
   const [color, setColor] = useState(NOTE_COLORS[0].id);
-  const [category, setCategory] = useState("");
-  const [anonymous, setAnonymous] = useState(true);
   const [error, setError] = useState("");
   const textareaRef = useRef(null);
 
@@ -37,10 +36,9 @@ export default function ShareModal({ open, onClose, onDone }) {
       /* reset for the next open */
       const timer = window.setTimeout(() => {
         setStep("form");
+        setRecipient("");
         setText("");
         setColor(NOTE_COLORS[0].id);
-        setCategory("");
-        setAnonymous(true);
         setError("");
       }, 250);
       return () => window.clearTimeout(timer);
@@ -57,17 +55,12 @@ export default function ShareModal({ open, onClose, onDone }) {
       textareaRef.current?.focus();
       return;
     }
-    if (!category) {
-      setError("Please choose a category so the right teachers can find this.");
-      return;
-    }
 
     setStep("submitting");
     const result = await actions.submitThought({
       content: text.trim(),
-      category,
+      recipient: recipient.trim() || null,
       color,
-      anonymous,
     });
 
     // The store already raised a toast; repeat the reason inline so it is obvious
@@ -83,22 +76,7 @@ export default function ShareModal({ open, onClose, onDone }) {
   /* ------------------------------ footer ---------------------------------- */
 
   let footer;
-  if (!user) {
-    footer = (
-      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <button
-          type="button"
-          onClick={onClose}
-          className="order-2 rounded-lg px-3 py-2.5 text-sm font-semibold text-muted transition hover:bg-surface-3 hover:text-fg sm:order-1"
-        >
-          Cancel
-        </button>
-        <Button as={Link} to="/admin/signup" variant="primary" size="md" className="order-1 w-full sm:order-2 sm:w-auto">
-          Create an account
-        </Button>
-      </div>
-    );
-  } else if (step === "success") {
+  if (step === "success") {
     footer = (
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <Button variant="ghost" size="md" onClick={onClose}>
@@ -158,9 +136,7 @@ export default function ShareModal({ open, onClose, onDone }) {
           ? undefined
           : step === "error"
             ? "Your draft is still here."
-            : user
-              ? "What would you like your teacher to know?"
-              : "Sign in to write a note."
+            : "What would you like your teacher to know?"
       }
       eyebrow={step === "success" ? undefined : "Anonymous expression"}
 size="md"
@@ -206,36 +182,25 @@ size="md"
             ))}
           </ol>
         </div>
-      ) : !user ? (
-        /* Signed out: explain why an account is needed instead of showing a form
-           that would fail at submit time. */
-        <div className="flex flex-col items-center px-1 py-6 text-center">
-          <span
-            aria-hidden="true"
-            className="mb-5 grid h-14 w-14 place-items-center rounded-2xl border border-line bg-surface-2 text-brand-soft"
-          >
-            <Lock size={22} />
-          </span>
-          <p className="max-w-sm text-[0.9375rem] leading-relaxed text-muted">
-            Writing a note needs an account, so a moderator can review it and so the community can report
-            anything that should not be there.
-          </p>
-          <p className="mt-4 flex items-start gap-2 rounded-xl border border-line bg-surface-2 px-4 py-3 text-left text-xs leading-relaxed text-faint">
-            <ShieldCheck size={15} className="mt-0.5 shrink-0 text-brand-soft" aria-hidden="true" />
-            <span>
-              You can post anonymously once you are signed in — your name is never shown publicly unless you
-              choose otherwise.
-            </span>
-          </p>
-          <p className="mt-4 text-xs text-faint">
-            Already have an account?{" "}
-            <Link to="/admin/login" className="font-semibold text-brand-soft transition hover:text-brand">
-              Sign in
-            </Link>
-          </p>
-        </div>
       ) : (
-        <form id="share-note-form" onSubmit={handleSubmit} className="space-y-6 pt-1">
+<form id="share-note-form" onSubmit={handleSubmit} className="space-y-6 pt-1">
+          <div>
+            <label htmlFor="note-recipient" className="mb-2 block text-sm font-semibold text-fg-soft">
+              Who is this note for?
+            </label>
+            <input
+              id="note-recipient"
+              type="text"
+              value={recipient}
+              onChange={(event) => setRecipient(event.target.value.slice(0, MAX_RECIPIENT_LENGTH))}
+              placeholder="A teacher's name (optional)"
+              aria-describedby="recipient-hint"
+              className="h-12 w-full rounded-xl border border-line bg-surface-2 px-4 text-[0.9375rem] text-fg placeholder:text-faint focus:border-brand/60 focus:bg-surface-3 focus:outline-none"
+            />
+            <p id="recipient-hint" className="mt-2 text-xs leading-relaxed text-faint">
+              Only the name you type here is saved with the note. Nothing about you is.
+            </p>
+          </div>
           <div>
             <label htmlFor="note-text" className="mb-2 block text-sm font-semibold text-fg-soft">
               Your note
@@ -296,49 +261,14 @@ size="md"
             </div>
           </fieldset>
 
-          <div>
-            <label htmlFor="note-category" className="mb-2 block text-sm font-semibold text-fg-soft">
-              Category
-            </label>
-            <select
-              id="note-category"
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-              aria-invalid={error.includes("category") || undefined}
-              className="h-12 w-full appearance-none rounded-xl border border-line bg-surface-2 px-4 pr-10 text-[0.9375rem] text-fg focus:border-brand/60 focus:bg-surface-3 focus:outline-none"
-            >
-              <option value="">Select a category</option>
-              {POST_CATEGORIES.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-surface-2 px-4 py-3.5 transition hover:border-surface-4">
-            <input
-              type="checkbox"
-              checked={anonymous}
-              onChange={(event) => setAnonymous(event.target.checked)}
-              className="mt-0.5 h-4.5 w-4.5 accent-brand"
-            />
-            <span>
-              <span className="block text-sm font-semibold text-fg-soft">Post anonymously</span>
-              <span className="mt-0.5 block text-xs text-faint">
-                Your identity will not be displayed publicly.
-              </span>
-            </span>
-          </label>
-
-          <p className="flex items-start gap-2.5 rounded-xl border border-brand/25 bg-brand/8 px-4 py-3 text-xs leading-relaxed text-muted">
+<p className="flex items-start gap-2.5 rounded-xl border border-brand/25 bg-brand/8 px-4 py-3 text-xs leading-relaxed text-muted">
             <ShieldCheck size={15} className="mt-0.5 shrink-0 text-brand-soft" aria-hidden="true" />
             <span>
               Your note will be reviewed by a moderator before appearing on the Kindness Wall.
-              {category && (
+              {recipient.trim() && (
                 <span className="mt-1 block text-faint">
-                  Filing under <strong className="text-fg-soft">{CATEGORY_LABEL[category]}</strong> as{" "}
-                  {anonymous ? "an anonymous note" : "a named student"}.
+                  Addressed to <strong className="text-fg-soft">{recipient.trim()}</strong> as an
+                  anonymous note.
                 </span>
               )}
             </span>

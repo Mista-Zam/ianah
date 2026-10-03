@@ -1,48 +1,34 @@
 import { useMemo, useState } from "react";
 import { Loader2, MessagesSquare, NotebookPen, Plus, RefreshCw, SearchX, WifiOff } from "lucide-react";
 import { useWall } from "../../store/wallContext";
-import { CATEGORIES } from "../../lib/constants";
 import StickyNote from "./StickyNote";
-import { WallToolbar } from "./CategoryFilter";
+import { WallToolbar } from "./WallToolbar";
 import EmptyState from "../ui/EmptyState";
 import Button from "../ui/Button";
 
 /**
- * The Kindness Wall: category filters, keyword search and an organically
- * arranged board of sticky notes (CSS multi-column so every note keeps its own
- * height, rotation and colour).
+ * The Kindness Wall: keyword search and an organically arranged board of sticky
+ * notes (CSS multi-column so every note keeps its own height, rotation and
+ * colour).
  *
  * Filtering happens here rather than in the query because the payload is already
- * bounded (fetchPublicPosts caps at 200) and every filter keystroke should feel
- * instant.
+ * bounded (fetchPublicPosts caps at 200) and every keystroke should feel instant.
  */
 export default function FreedomWall({ onOpenPost, onReport, onShare }) {
   const { publicWall, loading, error, actions, isConfigured } = useWall();
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("all");
-
-  const counts = useMemo(() => {
-    const map = { all: publicWall.length };
-    CATEGORIES.forEach((c) => {
-      if (c.id === "all") return;
-      map[c.id] = publicWall.filter((p) => p.category === c.id).length;
-    });
-    return map;
-  }, [publicWall]);
 
   const results = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return publicWall.filter((post) => {
-      const matchesCategory = category === "all" || post.category === category;
-      const matchesQuery =
-        !query ||
+    if (!query) return publicWall;
+    return publicWall.filter(
+      (post) =>
         post.content.toLowerCase().includes(query) ||
-        (post.category ?? "").toLowerCase().includes(query);
-      return matchesCategory && matchesQuery;
-    });
-  }, [publicWall, category, search]);
+        (post.recipient ?? "").toLowerCase().includes(query)
+    );
+  }, [publicWall, search]);
 
-  const filtersActive = category !== "all" || search.trim().length > 0;
+  const filtersActive = search.trim().length > 0;
 
   return (
     <section id="wall" className="scroll-mt-24" aria-labelledby="wall-heading">
@@ -55,8 +41,10 @@ export default function FreedomWall({ onOpenPost, onReport, onShare }) {
             Your experiences matter. Share something with the community.
           </p>
         </div>
+        {/* max-sm:hidden, not hidden sm:inline-flex — Button injects `inline-flex`,
+            and a base display utility beats `hidden` regardless of class order. */}
         {onShare && (
-          <Button variant="primary" size="md" onClick={onShare} className="hidden sm:inline-flex">
+          <Button variant="primary" size="md" onClick={onShare} className="max-sm:hidden">
             <Plus size={16} aria-hidden="true" />
             Write a Note
           </Button>
@@ -67,9 +55,6 @@ export default function FreedomWall({ onOpenPost, onReport, onShare }) {
         <WallToolbar
           search={search}
           onSearch={setSearch}
-          active={category}
-          onCategory={setCategory}
-          counts={counts}
           resultCount={results.length}
           total={publicWall.length}
         />
@@ -119,7 +104,6 @@ export default function FreedomWall({ onOpenPost, onReport, onShare }) {
                 variant="secondary"
                 onClick={() => {
                   setSearch("");
-                  setCategory("all");
                 }}
               >
                 Reset filters

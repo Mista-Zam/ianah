@@ -29,7 +29,7 @@ export default function HeroSection({ onShare }) {
         </span>
 
         <h1 className="mt-6 text-4xl leading-[1.05] font-extrabold tracking-tight text-fg sm:text-5xl lg:text-6xl">
-          Every Student&apos;s Voice,{" "}
+          Every Student&apos;s Message,{" "}
           <span className="relative inline-block">
             <span className="relative z-10">For Their Teachers.</span>
             <span

@@ -1,30 +1,4 @@
-import { CATEGORIES, CATEGORY_LABEL, NOTE_COLORS } from "./constants.js";
-
-/**
- * The UI addresses categories by a lowercase slug ("appreciation") because that
- * is what the existing filters and seeds use. The database stores the human label
- * ("Thank You") because the brief specified labels rather than slugs. These two
- * maps are the only place that translation lives.
- */
-export const CATEGORY_ID_BY_LABEL = Object.fromEntries(
-  CATEGORIES.filter((c) => c.id !== "all").map((c) => [c.label, c.id])
-);
-
-export const CATEGORY_LABEL_BY_ID = Object.fromEntries(
-  CATEGORIES.filter((c) => c.id !== "all").map((c) => [c.id, c.label])
-);
-
-export const CATEGORY_BY_ID = Object.fromEntries(CATEGORIES.map((c) => [c.id, c]));
-
-/** Convert a UI category slug into the value the posts.category enum expects. */
-export const toDbCategory = (slug) => {
-  const label = CATEGORY_LABEL_BY_ID[slug];
-  if (!label) throw new Error(`Unknown category: ${slug}`);
-  return label;
-};
-
-/** Convert a posts.category enum value back into the UI slug. */
-export const fromDbCategory = (label) => CATEGORY_ID_BY_LABEL[label] ?? "random";
+import { NOTE_COLORS } from "./constants.js";
 
 const VALID_COLOR_IDS = new Set(NOTE_COLORS.map((c) => c.id));
 
@@ -59,8 +33,10 @@ export function mapPublicPost(row) {
   return {
     id: row.id,
     content: row.content,
-    category: fromDbCategory(row.category),
-    categoryLabel: clean(row.category) ?? CATEGORY_LABEL[fromDbCategory(row.category)],
+    /* Who the note is addressed to. The database already normalises a blank
+       recipient to NULL, but trimming again here means a whitespace-only value
+       never reaches the UI even if a row predates that constraint. */
+    recipient: clean(row.recipient) || null,
     color: VALID_COLOR_IDS.has(row.note_color) ? row.note_color : NOTE_COLORS[0].id,
     anonymous,
     displayName: anonymous ? null : (row.display_name ?? "A student"),
@@ -81,8 +57,10 @@ export function mapModerationPost(row, { reportCount = 0, reportReasons = [] } =
   return {
     id: row.id,
     content: row.content,
-    category: fromDbCategory(row.category),
-    categoryLabel: clean(row.category) ?? CATEGORY_LABEL[fromDbCategory(row.category)],
+    /* Who the note is addressed to. The database already normalises a blank
+       recipient to NULL, but trimming again here means a whitespace-only value
+       never reaches the UI even if a row predates that constraint. */
+    recipient: clean(row.recipient) || null,
     color: VALID_COLOR_IDS.has(row.note_color) ? row.note_color : NOTE_COLORS[0].id,
     anonymous,
     displayName: anonymous ? null : "Named student",

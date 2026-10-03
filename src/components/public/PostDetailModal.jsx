@@ -1,13 +1,12 @@
-import { Flag, ShieldCheck, CalendarDays, Tag, UserRound } from "lucide-react";
+import { Flag, ShieldCheck, CalendarDays, HeartHandshake, UserRound } from "lucide-react";
 import Modal from "../ui/Modal";
 import Button from "../ui/Button";
 import StickyNote from "./StickyNote";
-import { CATEGORY_LABEL } from "../../lib/constants";
 import { formatLongDate } from "../../lib/format";
 
 const META = [
   { icon: UserRound, label: "Author" },
-  { icon: Tag, label: "Category" },
+  { icon: HeartHandshake, label: "For" },
   { icon: CalendarDays, label: "Shared" },
 ];
 
@@ -54,8 +53,8 @@ export default function PostDetailModal({ post, open, onClose, onReport }) {
                     // chose not to post anonymously, so there is nothing to show
                     // here when it is absent.
                     (post.displayName ?? "Shared by a student")
-                : label === "Category"
-                  ? (CATEGORY_LABEL[post.category] ?? "Random")
+                : label === "For"
+                  ? (post.recipient ?? "Everyone")
                   : formatLongDate(post.publishedAt ?? post.submittedAt);
             return (
               <div key={label} className="rounded-xl border border-line bg-surface-2 px-4 py-3">

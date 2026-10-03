@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Database, Info, RefreshCw, ShieldCheck, Sliders } from "lucide-react";
 import Button from "../../components/ui/Button";
 import { useWall } from "../../store/wallContext";
-import { CATEGORIES, NOTE_COLORS } from "../../lib/constants";
+import { NOTE_COLORS } from "../../lib/constants";
 
 /**
  * This page describes how the platform is actually configured rather than
@@ -84,20 +84,7 @@ export default function AdminSettings() {
           Defined as enums in <code className="text-muted">supabase/migrations/0001_initial_schema.sql</code>.
           Changing them requires a migration.
         </p>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-line bg-surface-2 p-4">
-            <p className="text-sm font-semibold text-fg-soft">Active categories</p>
-            <ul className="mt-2.5 flex flex-wrap gap-1.5">
-              {CATEGORIES.filter((c) => c.id !== "all").map((c) => (
-                <li
-                  key={c.id}
-                  className="rounded-full border border-line bg-surface-3 px-2.5 py-1 text-[0.6875rem] font-semibold text-muted"
-                >
-                  {c.label}
-                </li>
-              ))}
-            </ul>
-          </div>
+        <div className="mt-4 grid gap-4">
           <div className="rounded-xl border border-line bg-surface-2 p-4">
             <p className="text-sm font-semibold text-fg-soft">Note colours</p>
             <ul className="mt-2.5 flex flex-wrap gap-2">

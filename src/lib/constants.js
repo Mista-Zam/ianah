@@ -22,23 +22,6 @@ export const NOTE_COLOR_MAP = Object.fromEntries(NOTE_COLORS.map((c) => [c.id, c
 
 export const colorById = (id) => NOTE_COLOR_MAP[id] ?? NOTE_COLORS[0];
 
-export const CATEGORIES = [
-  { id: "all", label: "All" },
-  { id: "classroom", label: "Classroom" },
-  { id: "teaching-life", label: "School Life" },
-  { id: "vent", label: "Honest Thoughts" },
-  { id: "wins", label: "Wins" },
-  { id: "advice", label: "Advice" },
-  { id: "appreciation", label: "Thank You" },
-  { id: "funny", label: "Funny" },
-  { id: "motivation", label: "Motivation" },
-  { id: "random", label: "Random" },
-];
-
-export const POST_CATEGORIES = CATEGORIES.filter((c) => c.id !== "all");
-
-export const CATEGORY_LABEL = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.label]));
-
 /* Status vocabulary for the moderation console. Each badge carries an icon +
    text label so meaning never depends on colour alone. */
 export const STATUS = {
@@ -113,14 +96,36 @@ export const COMMUNITY_STATS = [
 
 export const MAX_THOUGHT_LENGTH = 600;
 
+/* Who the note is addressed to. Optional and free text, so it has no vocabulary
+   to keep in sync — just a bound. The same 60 is enforced by a check constraint
+   on public.posts.recipient, so the UI and the database agree even if someone
+   posts to the REST API directly. */
+export const MAX_RECIPIENT_LENGTH = 60;
+
 /**
- * Moderator accounts are provisioned in the database, never shipped in the
- * bundle. Promote a real user with:
+ * Moderator provisioning rules. These mirror the checks inside
+ * `public.admin_create_moderator` (supabase/migrations/0011_moderator_accounts.sql).
+ * They are duplicated on purpose: catching a typo before the round trip gives
+ * immediate feedback, but the database stays the authority. A client that skips
+ * these checks still cannot create an account that violates them.
+ *
+ * The password floor is 10 rather than GoTrue's default 6 because a moderator can
+ * publish and delete every note in the app.
+ */
+export const MAX_DISPLAY_NAME_LENGTH = 60;
+export const MIN_MODERATOR_PASSWORD_LENGTH = 10;
+export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
+
+/**
+ * The very first moderator is promoted in the database, never shipped in the
+ * bundle:
  *
  *   update public.profiles set role = 'admin' where id = (
  *     select id from auth.users where email = 'you@school.org'
  *   );
  *
- * There is deliberately no client-side notion of an admin credential to check —
- * `profiles.role` and the RLS policies are the only authority.
+ * After that, the Moderators page in the console adds anyone else via
+ * `admin_create_moderator`. Either way there is deliberately no client-side notion
+ * of an admin credential to check — `profiles.role` and the RLS policies are the
+ * only authority.
  */

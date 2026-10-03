@@ -71,7 +71,6 @@ const now = Date.now();
 const PASSWORD = "Test-Passw0rd!";
 
 // Enum values, verbatim from pg_enum.
-const CAT = "Thank You";
 const REASON = "Spam";
 
 console.log("\n=== SETUP ===");
@@ -105,45 +104,106 @@ check("student CAN update own display_name",
   renamed.data?.[0]?.display_name === "Renamed", JSON.stringify(renamed.data));
 
 // ------------------------------------------------------------------- posts ---
-console.log("\n=== posts: students cannot self-publish or impersonate ===");
-const hostile = await req("/rest/v1/posts?select=id,status,author_id", {
+console.log("\n=== posts: the only write path is submit_note ===");
+
+// Anon has no INSERT privilege on the table at all.
+const anonDirect = await req("/rest/v1/posts", {
+  method: "POST",
+  body: { content: "anon direct insert", note_color: "yellow" },
+});
+check("anon cannot insert into posts directly", denied(anonDirect.status), `status=${anonDirect.status}`);
+
+// A leftover account has a session but no business writing rows either.
+const stDirect = await req("/rest/v1/posts", {
   method: "POST", token: sT,
+  body: { content: "student direct insert", note_color: "yellow" },
+});
+check("an authenticated non-moderator cannot insert into posts directly",
+  denied(stDirect.status), `status=${stDirect.status}`);
+
+// The RPC is the whole public surface. It takes no status, no author_id and no
+// anonymity flag, so those cannot be tampered with -- there is nowhere to put them.
+const hostileArgs = await req("/rest/v1/rpc/submit_note", {
+  method: "POST",
   body: {
-    content: "Hostile insert: claims to be published and owned by an admin.",
-    category: CAT, note_color: "yellow", is_anonymous: true,
-    status: "published", author_id: admin.user.id,
+    p_content: "RPC with extra arguments trying to publish and claim authorship.",
+    p_note_color: "yellow",
+    p_is_anonymous: false,
+    p_status: "published",
+    p_author_id: admin.user.id,
   },
 });
-check("hostile insert is forced to status=pending",
-  hostile.status === 201 && hostile.data?.[0]?.status === "pending",
-  `status=${hostile.status} ${hostile.raw.slice(0, 120)}`);
-check("hostile author_id overwritten with auth.uid()",
-  hostile.data?.[0]?.author_id === student.user.id, `got ${hostile.data?.[0]?.author_id}`);
+// PostgREST resolves a function call by exact argument list, so extra keys do not
+// get quietly dropped -- the call fails to match any overload and 404s. The
+// tampering is refused at the routing layer, before the function is ever entered.
+check("submit_note refuses a call carrying status/author_id/anonymity flags",
+  denied(hostileArgs.status), `status=${hostileArgs.status} ${hostileArgs.raw.slice(0, 130)}`);
 
-const tooLong = await req("/rest/v1/posts", {
-  method: "POST", token: sT,
-  body: { content: "x".repeat(601), category: CAT, note_color: "yellow" },
+const created = await req("/rest/v1/rpc/submit_note", {
+  method: "POST",
+  body: {
+    p_content: "A kind note submitted with no account at all.",
+    p_recipient: "Ms Okafor",
+    p_note_color: "yellow",
+  },
+});
+check("anon can submit a note via submit_note",
+  typeof created.data === "string", `status=${created.status} ${created.raw.slice(0, 110)}`);
+
+const id = created.data;
+check("submit_note returns a bare uuid", /^[0-9a-f-]{36}$/i.test(String(id)), String(id));
+
+// Nothing identifying comes back, and nothing identifying was stored.
+const hiddenPending = await req(`/rest/v1/posts?id=eq.${id}&select=status,author_id,is_anonymous,recipient`, { token: aT });
+check("the new note is pending, not published",
+  hiddenPending.data?.[0]?.status === "pending", JSON.stringify(hiddenPending.data));
+check("author_id is NULL -- the anonymous write path stores no identity",
+  hiddenPending.data?.[0]?.author_id === null, JSON.stringify(hiddenPending.data));
+check("is_anonymous is true", hiddenPending.data?.[0]?.is_anonymous === true);
+check("the recipient is stored verbatim",
+  hiddenPending.data?.[0]?.recipient === "Ms Okafor", JSON.stringify(hiddenPending.data));
+
+// A blank recipient must land as NULL, not "".
+const blankRecipient = await req("/rest/v1/rpc/submit_note", {
+  method: "POST", body: { p_content: "A note addressed to nobody in particular.", p_recipient: "   " },
+});
+const blankRow = await req(`/rest/v1/posts?id=eq.${blankRecipient.data}&select=recipient`, { token: aT });
+check("a whitespace-only recipient is normalised to NULL",
+  blankRow.data?.[0]?.recipient === null, JSON.stringify(blankRow.data));
+
+const longRecipient = await req("/rest/v1/rpc/submit_note", {
+  method: "POST", body: { p_content: "A note with an absurdly long recipient.", p_recipient: "x".repeat(61) },
+});
+check("a recipient over 60 chars is rejected at the database",
+  denied(longRecipient.status), `status=${longRecipient.status}`);
+
+const notYetPublic = await req(`/rest/v1/public_posts?id=eq.${id}&select=id`);
+check("a pending note is NOT on the public wall", notYetPublic.status === 200 && notYetPublic.data.length === 0);
+
+const tooLong = await req("/rest/v1/rpc/submit_note", {
+  method: "POST", body: { p_content: "x".repeat(601), p_note_color: "yellow" },
 });
 check("note over 600 chars is rejected", denied(tooLong.status), `status=${tooLong.status}`);
+
+const blankNote = await req("/rest/v1/rpc/submit_note", {
+  method: "POST", body: { p_content: "x", p_note_color: "yellow" },
+});
+check("1-char note is valid (min length is 1)", typeof blankNote.data === "string",
+  `status=${blankNote.status} ${blankNote.raw.slice(0, 90)}`);
 
 // ------------------------------------------------------------ RLS: reading ---
 console.log("\n=== RLS: who can read what ===");
 const stPublished = await req("/rest/v1/posts?status=eq.published&select=id,author_id", { token: sT });
-check("student sees ZERO published base-table rows (author_id leak)",
+check("non-moderator sees ZERO published base-table rows (author_id leak)",
   stPublished.status === 200 && stPublished.data.length === 0,
   `${stPublished.data?.length} rows`);
 
-const stAll = await req("/rest/v1/posts?select=id,author_id", { token: sT });
-check("student sees only their OWN posts in the base table",
-  stAll.status === 200 && stAll.data.length > 0 && stAll.data.every((p) => p.author_id === student.user.id),
-  `${stAll.data?.length} rows`);
-
 const stLogs = await req("/rest/v1/moderation_logs?select=id", { token: sT });
-check("student cannot read the audit log",
+check("non-moderator cannot read the audit log",
   stLogs.status === 200 && stLogs.data.length === 0, `${stLogs.data?.length} rows`);
 
 const stReports = await req("/rest/v1/reports?select=id", { token: oT });
-check("student cannot read another student's reports",
+check("non-moderator cannot read any reports",
   stReports.status === 200 && stReports.data.length === 0, `${stReports.data?.length} rows`);
 
 // ------------------------------------------------------------ public view ---
@@ -155,6 +215,9 @@ const keys = Object.keys(pv.data?.[0] ?? {});
 check("public_posts has NO author_id column", !keys.includes("author_id"), keys.join(","));
 check("public_posts exposes no rejection/review metadata",
   !keys.some((k) => k.includes("reject") || k.includes("review")), keys.join(","));
+check("public_posts exposes the recipient", keys.includes("recipient"), keys.join(","));
+check("public_posts has NO category column (dropped in 0010)",
+  !keys.includes("category"), keys.join(","));
 
 const anonPosts = await req("/rest/v1/posts?select=author_id&status=eq.published");
 check("anon CANNOT read posts.author_id (no table grant)", denied(anonPosts.status), `status=${anonPosts.status}`);
@@ -189,9 +252,93 @@ check("admin CAN call admin_dashboard_stats",
   dashAdmin.status === 200 && typeof dashAdmin.data?.[0]?.pending === "number",
   `${dashAdmin.status} ${dashAdmin.raw.slice(0, 110)}`);
 
+// ------------------------------------------------- moderator provisioning ---
+// admin_create_moderator is the one RPC that can mint an account with full
+// privileges, so its guard is the single most security-relevant assertion in this
+// file. It must hold for anon and for students, and the account it creates must
+// genuinely work.
+console.log("\n=== moderator provisioning: guards ===");
+const modEmail = `mod.${now}@school.org`;
+const modPw = "Provisioned-Pass9";
+
+const anonCreate = await req("/rest/v1/rpc/admin_create_moderator", {
+  method: "POST", body: { p_email: modEmail, p_password: modPw },
+});
+check("anon cannot create a moderator", denied(anonCreate.status), `status=${anonCreate.status}`);
+
+const anonList = await req("/rest/v1/rpc/admin_list_moderators", { method: "POST", body: {} });
+check("anon cannot list moderators", denied(anonList.status), `status=${anonList.status}`);
+
+const stCreate = await req("/rest/v1/rpc/admin_create_moderator", {
+  method: "POST", token: sT, body: { p_email: `x.${now}@school.org`, p_password: modPw },
+});
+check("student cannot create a moderator", denied(stCreate.status), `status=${stCreate.status}`);
+check("the refusal is 42501 insufficient_privilege", stCreate.raw.includes("42501"),
+  stCreate.raw.slice(0, 110));
+
+const stList = await req("/rest/v1/rpc/admin_list_moderators", { method: "POST", token: sT, body: {} });
+check("student cannot list moderators", denied(stList.status), `status=${stList.status}`);
+
+const stStillStudent = await req(`/rest/v1/profiles?select=role&id=eq.${student.user.id}`, { token: sT });
+check("the student is still a student after trying", stStillStudent.data?.[0]?.role === "student",
+  `role=${stStillStudent.data?.[0]?.role}`);
+
+console.log("\n=== moderator provisioning: validation ===");
+const shortPw = await req("/rest/v1/rpc/admin_create_moderator", {
+  method: "POST", token: aT, body: { p_email: `y.${now}@school.org`, p_password: "short" },
+});
+check("a password under 10 characters is refused", denied(shortPw.status), `status=${shortPw.status}`);
+
+const badEmail = await req("/rest/v1/rpc/admin_create_moderator", {
+  method: "POST", token: aT, body: { p_email: "not-an-email", p_password: modPw },
+});
+check("a malformed email is refused", denied(badEmail.status), `status=${badEmail.status}`);
+
+const demoDomain = await req("/rest/v1/rpc/admin_create_moderator", {
+  method: "POST", token: aT, body: { p_email: `z.${now}@kindnesswall.test`, p_password: modPw },
+});
+check("the reserved demo domain is refused", denied(demoDomain.status), `status=${demoDomain.status}`);
+
+console.log("\n=== moderator provisioning: the happy path ===");
+const madeMod = await req("/rest/v1/rpc/admin_create_moderator", {
+  method: "POST", token: aT, body: { p_email: modEmail, p_password: modPw, p_display_name: "New Moderator" },
+});
+check("admin_create_moderator returns a uuid",
+  madeMod.status === 200 && /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(String(madeMod.data)),
+  `${madeMod.status} ${madeMod.raw.slice(0, 110)}`);
+
+const dupe = await req("/rest/v1/rpc/admin_create_moderator", {
+  method: "POST", token: aT, body: { p_email: modEmail, p_password: modPw },
+});
+check("a duplicate email is refused", denied(dupe.status) && dupe.raw.includes("23505"),
+  dupe.raw.slice(0, 110));
+
+const newMod = await signIn(modEmail, modPw);
+check("the new moderator can sign in with no email confirmation step",
+  Boolean(newMod?.access_token), "sign-in failed");
+const mT = newMod?.access_token;
+
+const newModProfile = await req(`/rest/v1/profiles?select=role,display_name&id=eq.${newMod?.user?.id}`,
+  { token: mT });
+check("the new account really holds role=admin", newModProfile.data?.[0]?.role === "admin",
+  `role=${newModProfile.data?.[0]?.role}`);
+check("the display name was stored", newModProfile.data?.[0]?.display_name === "New Moderator",
+  `name=${newModProfile.data?.[0]?.display_name}`);
+
+const modList = await req("/rest/v1/rpc/admin_list_moderators", { method: "POST", token: mT, body: {} });
+check("the new moderator can list moderators",
+  modList.status === 200 && Array.isArray(modList.data) && modList.data.length >= 2,
+  `${modList.status} n=${modList.data?.length}`);
+check("the list includes the new account's email",
+  Array.isArray(modList.data) && modList.data.some((m) => m.email === modEmail), "not in list");
+
+const modDash = await req("/rest/v1/rpc/admin_dashboard_stats", { method: "POST", token: mT, body: {} });
+check("the new moderator has real console privileges",
+  modDash.status === 200 && typeof modDash.data?.[0]?.pending === "number",
+  `${modDash.status} ${modDash.raw.slice(0, 110)}`);
+
 // -------------------------------------------------------------- moderation ---
 console.log("\n=== moderation + audit trail ===");
-const id = hostile.data?.[0]?.id;
 
 const stPublish = await req(`/rest/v1/posts?id=eq.${id}&select=status`, {
   method: "PATCH", token: sT, body: { status: "published" },
@@ -244,41 +391,67 @@ const restore = await req(`/rest/v1/posts?id=eq.${id}`, {
 check("admin can restore", restore.status === 200, restore.raw.slice(0, 100));
 
 // ---------------------------------------------------------------- reports ---
-console.log("\n=== reporting ===");
-const r1 = await req("/rest/v1/reports?select=id", {
-  method: "POST", token: sT, body: { post_id: id, reason: REASON, details: "test report" },
-});
-check("student can report a published note", r1.status === 201, r1.raw.slice(0, 120));
+console.log("\n=== reporting: submit_report is the only path ===");
 
-const r2 = await req("/rest/v1/reports?select=id", {
-  method: "POST", token: sT, body: { post_id: id, reason: REASON },
+// Reporting is account-free, so it goes through the RPC. A direct table insert
+// from anyone who is not a moderator is closed.
+const anonReportDirect = await req("/rest/v1/reports", {
+  method: "POST", body: { post_id: id, reason: REASON, details: "anon direct" },
 });
-check("duplicate report from the same user is rejected", denied(r2.status), `status=${r2.status}`);
+check("anon cannot insert into reports directly",
+  denied(anonReportDirect.status), `status=${anonReportDirect.status}`);
+
+const stReportDirect = await req("/rest/v1/reports", {
+  method: "POST", token: sT, body: { post_id: id, reason: REASON, details: "student direct" },
+});
+check("a non-moderator cannot insert into reports directly",
+  denied(stReportDirect.status), `status=${stReportDirect.status}`);
+
+const r1 = await req("/rest/v1/rpc/submit_report", {
+  method: "POST", body: { p_post_id: id, p_reason: REASON, p_details: "test report" },
+});
+check("anon can report a published note via submit_report",
+  typeof r1.data === "string", `status=${r1.status} ${r1.raw.slice(0, 110)}`);
+
+// One report per note for everyone anonymous. reporter_id is NULL for every
+// anonymous caller, so the old unique(reporter_id, post_id) cannot dedupe -- the
+// partial index on (post_id) where reporter_id is null does.
+const r2 = await req("/rest/v1/rpc/submit_report", {
+  method: "POST", body: { p_post_id: id, p_reason: REASON },
+});
+check("a second anonymous report on the same note is rejected",
+  denied(r2.status), `status=${r2.status}`);
+
+const notPublished = await req("/rest/v1/rpc/submit_report", {
+  method: "POST", body: { p_post_id: blankNote.data, p_reason: REASON },
+});
+check("reporting an unpublished note is rejected",
+  denied(notPublished.status), `status=${notPublished.status}`);
 
 const hidden = await req(`/rest/v1/reports?post_id=eq.${id}&select=reporter_id`, { token: oT });
-check("another student cannot see the reporter identity",
+check("a non-moderator cannot see the reporter identity",
   hidden.status === 200 && hidden.data.length === 0, `${hidden.data?.length} rows`);
 
-const asAdmin = await req(`/rest/v1/reports?post_id=eq.${id}&select=id,status`, { token: aT });
-check("admin can read the report queue", asAdmin.status === 200 && asAdmin.data.length === 1);
+const asAdmin = await req(`/rest/v1/reports?post_id=eq.${id}&select=id,status,reporter_id`, { token: aT });
+check("admin can read the report queue", asAdmin.status === 200 && asAdmin.data.length === 1,
+  `${asAdmin.status} ${asAdmin.data?.length} rows`);
+check("the anonymous report stores reporter_id as NULL",
+  asAdmin.data?.[0]?.reporter_id === null, JSON.stringify(asAdmin.data));
 
-const stResolve = await req(`/rest/v1/reports?id=eq.${r1.data[0].id}&select=status`, {
+const reportId = asAdmin.data?.[0]?.id;
+
+const stResolve = await req(`/rest/v1/reports?id=eq.${reportId}&select=status`, {
   method: "PATCH", token: oT, body: { status: "dismissed" },
 });
-const reportUnchanged = await req(`/rest/v1/reports?id=eq.${r1.data[0].id}&select=status`, { token: aT });
-check("a student CANNOT resolve a report (row unchanged)",
+const reportUnchanged = await req(`/rest/v1/reports?id=eq.${reportId}&select=status`, { token: aT });
+check("a non-moderator CANNOT resolve a report (row unchanged)",
   reportUnchanged.data?.[0]?.status === "pending",
   `http=${stResolve.status} status=${reportUnchanged.data?.[0]?.status} rows=${stResolve.data?.length}`);
 
-const adResolve = await req(`/rest/v1/reports?id=eq.${r1.data[0].id}`, {
+const adResolve = await req(`/rest/v1/reports?id=eq.${reportId}`, {
   method: "PATCH", token: aT, body: { status: "dismissed" },
 });
 check("admin can resolve a report", adResolve.status === 200, adResolve.raw.slice(0, 120));
-
-const hiddenPost = await req("/rest/v1/posts", {
-  method: "POST", token: sT, body: { content: "x", category: CAT, note_color: "yellow" },
-});
-check("1-char note is valid (min length is 1)", !denied(hiddenPost.status), `status=${hiddenPost.status}`);
 
 // ---------------------------------------------------------------- summary ---
 console.log(`\n${"=".repeat(54)}`);

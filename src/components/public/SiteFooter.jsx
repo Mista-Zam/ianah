@@ -85,7 +85,7 @@ export default function SiteFooter({ onShare }) {
 
         <div className="mt-8 flex flex-col gap-2 border-t border-line-soft pt-6 text-xs text-faint sm:flex-row sm:items-center sm:justify-between">
           <p>
-            © 2026 {BRAND.name}. Every note is reviewed by a moderator before it is published.
+            © 2026 Teachers' Day Dedication Wall by ZMCYBAÑEZ. All rights reserved. <br className="sm:hidden" />
           </p>
           <p>Expression · Community · Empathy · Anonymity · Respect</p>
         </div>

@@ -11,6 +11,7 @@ const TITLES = {
   "/admin/rejected": { title: "Rejected Posts", sub: "Kept private, with a reason on record" },
   "/admin/reported": { title: "Reported Posts", sub: "Flagged by community members" },
   "/admin/logs": { title: "Moderation Logs", sub: "Every action, with moderator and timestamp" },
+  "/admin/moderators": { title: "Moderators", sub: "Who else can review, publish and delete" },
   "/admin/settings": { title: "Settings", sub: "Moderation preferences" },
 };
 
@@ -20,12 +21,15 @@ export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Guard on authReady, not just isAdmin. On a hard refresh or a direct link the
-  // store starts with isAdmin=false and only resolves the profile asynchronously,
-  // so redirecting on isAdmin alone bounced signed-in admins back to the login page
-  // before their role had been read. When Supabase is not configured there is no
-  // session that will ever arrive, so redirect immediately and let the login screen
-  // explain why.
+  // Guard on authReady, and never on isAdmin alone. authReady means the store has
+  // finished resolving the signed-in user's profiles.role -- not merely that a
+  // session exists. Those are different moments: on a hard refresh or a direct
+  // link the session arrives first, so `isAdmin` is still false while the role is
+  // in flight. Redirecting on `!isAdmin` during that gap bounced real moderators
+  // off every console route to "/" and made deep links unusable.
+  //
+  // When Supabase is not configured there is no session that will ever arrive, so
+  // redirect immediately and let the login screen explain why.
   useEffect(() => {
     if (!isConfigured) {
       navigate("/admin/login", { replace: true });

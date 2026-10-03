@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { AlertTriangle, Check, Flag, Loader2, Lock, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Check, Flag, Loader2, ShieldCheck } from "lucide-react";
 import Modal from "../ui/Modal";
 import Button from "../ui/Button";
 import StickyNote from "./StickyNote";
@@ -14,7 +13,7 @@ import { REPORT_REASONS } from "../../lib/constants";
  * to the post's author; the console only ever sees "Community member".
  */
 export default function ReportModal({ post, open, onClose }) {
-  const { actions, user } = useWall();
+  const { actions } = useWall();
   const [reason, setReason] = useState(REPORT_REASONS[0]);
   const [details, setDetails] = useState("");
   const [sent, setSent] = useState(false);
@@ -78,37 +77,25 @@ export default function ReportModal({ post, open, onClose }) {
             >
               Cancel
             </button>
-            {user ? (
-              <Button
-                variant="primary"
-                size="md"
-                onClick={submit}
-                disabled={busy}
-                className="order-1 w-full sm:order-2 sm:w-auto"
-              >
-                {busy ? (
-                  <>
-                    <Loader2 size={15} className="animate-spin-slow" aria-hidden="true" />
-                    Sending…
-                  </>
-                ) : (
-                  <>
-                    <Flag size={15} aria-hidden="true" />
-                    Submit Report
-                  </>
-                )}
-              </Button>
-            ) : (
-              <Button
-                as={Link}
-                to="/admin/login"
-                variant="primary"
-                size="md"
-                className="order-1 w-full sm:order-2 sm:w-auto"
-              >
-                Sign in to report
-              </Button>
-            )}
+            <Button
+              variant="primary"
+              size="md"
+              onClick={submit}
+              disabled={busy}
+              className="order-1 w-full sm:order-2 sm:w-auto"
+            >
+              {busy ? (
+                <>
+                  <Loader2 size={15} className="animate-spin-slow" aria-hidden="true" />
+                  Sending…
+                </>
+              ) : (
+                <>
+                  <Flag size={15} aria-hidden="true" />
+                  Submit Report
+                </>
+              )}
+            </Button>
           </div>
         )
       }
@@ -131,22 +118,12 @@ export default function ReportModal({ post, open, onClose }) {
             <p className="line-clamp-4 text-sm leading-relaxed text-muted">&ldquo;{post.content}&rdquo;</p>
           </div>
 
-          {!user && (
-            <p className="flex items-start gap-2.5 rounded-xl border border-line bg-surface-2 px-4 py-3 text-xs leading-relaxed text-muted">
-              <Lock size={14} className="mt-0.5 shrink-0 text-faint" aria-hidden="true" />
-              <span>
-                You need an account to report a note. That is how we keep one person from flooding the queue —{" "}
-                <Link to="/admin/login" className="font-semibold text-brand-soft transition hover:text-brand">
-                  sign in
-                </Link>{" "}
-                or{" "}
-                <Link to="/admin/signup" className="font-semibold text-brand-soft transition hover:text-brand">
-                  create one
-                </Link>
-                .
-              </span>
-            </p>
-          )}
+          <p className="flex items-start gap-2.5 rounded-xl border border-line bg-surface-2 px-4 py-3 text-xs leading-relaxed text-muted">
+            <ShieldCheck size={14} className="mt-0.5 shrink-0 text-brand-soft" aria-hidden="true" />
+            <span>
+              No account needed. Reports are anonymous, and you can only report a given note once.
+            </span>
+          </p>
 
           <fieldset>
             <legend className="mb-2.5 text-sm font-semibold text-fg-soft">Reason for reporting</legend>

@@ -13,7 +13,7 @@ import {
 import StatCard from "../../components/admin/StatCard";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { useWall } from "../../store/wallContext";
-import { CATEGORY_LABEL, colorById } from "../../lib/constants";
+import { colorById } from "../../lib/constants";
 import { formatDateTime, pluralize, timeAgo, truncate } from "../../lib/format";
 
 export default function AdminDashboard() {
@@ -134,7 +134,7 @@ export default function AdminDashboard() {
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status="pending" size="sm" />
                     <span className="text-[0.6875rem] font-bold tracking-[0.1em] text-faint uppercase">
-                      {CATEGORY_LABEL[post.category]}
+                      {post.recipient ? `For ${truncate(post.recipient, 24)}` : "For everyone"}
                     </span>
                   </div>
                   <p className="mt-1.5 line-clamp-2 text-sm text-fg-soft">&ldquo;{post.content}&rdquo;</p>
@@ -165,7 +165,8 @@ export default function AdminDashboard() {
                     &ldquo;{truncate(post.content, 90)}&rdquo;
                   </p>
                   <p className="mt-1.5 text-[0.6875rem] text-faint">
-                    {CATEGORY_LABEL[post.category]} &middot; {timeAgo(post.publishedAt)}
+                    {post.recipient ? `For ${post.recipient}` : "For everyone"} &middot;{" "}
+                    {timeAgo(post.publishedAt)}
                   </p>
                 </li>
               ))}

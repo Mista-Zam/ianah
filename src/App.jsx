@@ -8,7 +8,6 @@ import WallPage from "./pages/WallPage";
 import AboutPage from "./pages/AboutPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import AdminLogin from "./pages/admin/AdminLogin";
-import SignUp from "./pages/admin/SignUp";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import PendingPosts from "./pages/admin/PendingPosts";
 import PublishedPosts from "./pages/admin/PublishedPosts";
@@ -16,6 +15,7 @@ import RejectedPosts from "./pages/admin/RejectedPosts";
 import ReportedPosts from "./pages/admin/ReportedPosts";
 import ModerationLogs from "./pages/admin/ModerationLogs";
 import AdminSettings from "./pages/admin/AdminSettings";
+import ModeratorAccounts from "./pages/admin/ModeratorAccounts";
 
 export default function App() {
   return (
@@ -32,7 +32,6 @@ export default function App() {
 
           {/* Moderation console — never linked from the public navigation */}
           <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/admin/signup" element={<SignUp />} />
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
@@ -41,6 +40,7 @@ export default function App() {
             <Route path="rejected" element={<RejectedPosts />} />
             <Route path="reported" element={<ReportedPosts />} />
             <Route path="logs" element={<ModerationLogs />} />
+            <Route path="moderators" element={<ModeratorAccounts />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
         </Routes>

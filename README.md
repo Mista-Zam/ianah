@@ -161,8 +161,10 @@ did not land.
 
 ### 4. Create the first moderator
 
-There is no registration path to admin — by design. Sign up normally through the
-app, then promote the account once from the SQL editor:
+There is no registration path to admin — by design. `handle_new_user()` refuses an
+`admin` role arriving from signup metadata, so the first moderator must be promoted
+out of band. Sign up normally through the app, then promote that account once from
+the SQL editor:
 
 ```sql
 update public.profiles
@@ -172,8 +174,18 @@ update public.profiles
  );
 ```
 
-`handle_new_user()` refuses an `admin` role arriving from signup metadata, so
-this promotion is the only way in.
+That promotion is only needed for the **first** moderator. After it exists, open
+**Moderators** in the console (`/admin/moderators`) and add anyone else from there —
+the `admin_create_moderator` RPC creates the account, confirms it, and promotes it
+in one step. Note the deliberate consequence: a moderator session can now mint
+further moderator accounts, so a compromised moderator session can leave a
+backdoor that outlives it. The guard is `is_admin()` inside the RPC, checked
+server-side on every call.
+
+`auth.users.email` is a plain column but `auth.identities.email` is a generated
+column in some GoTrue versions. The migration only writes `identity_data` and lets
+the generated column derive the address; if you backport the function by hand, do
+not add `email` to that insert or it fails with `428C9`.
 
 ### 5. Run it
 
@@ -343,8 +355,9 @@ or report. It now routes by role instead.
 
 ## Still outstanding
 
-- **No moderator account exists.** Sign up through `/admin/signup`, then promote the
-  profile. Until then `/admin/login` works but has nothing to log into:
+- **No moderator account exists in production.** Sign up through the hosted
+  `/admin/login`, then promote the profile once. Until then `/admin/login` works
+  but has nothing to log into:
 
   ```sql
   update public.profiles set role = 'admin' where id = (
@@ -353,7 +366,8 @@ or report. It now routes by role instead.
   ```
 
   Run it in the hosted project's Dashboard → SQL Editor. Do not promote by
-  inserting into `auth.users` by hand.
+  inserting into `auth.users` by hand. Once one moderator exists, every later one
+  is added from **Moderators** in the console rather than with SQL.
 - **Rotate the database password.** It was shared in a chat transcript while
   deploying, so treat it as exposed. Settings → Database in the hosted dashboard.
 - **No browser-rendered check.** Everything above exercises the data layer. The

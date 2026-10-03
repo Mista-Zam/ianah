@@ -6,27 +6,30 @@ import ModerationDetailSheet from "../../components/admin/ModerationDetailSheet"
 import Button from "../../components/ui/Button";
 import EmptyState from "../../components/ui/EmptyState";
 import { useWall } from "../../store/wallContext";
-import { REJECTION_REASONS, POST_CATEGORIES } from "../../lib/constants";
+import { REJECTION_REASONS } from "../../lib/constants";
 import { formatDateTime } from "../../lib/format";
 
 export default function RejectedPosts() {
   const { byStatus } = useWall();
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("all");
   const [reason, setReason] = useState("all");
   const [detailId, setDetailId] = useState(null);
 
   const posts = useMemo(() => {
     const query = search.trim().toLowerCase();
     return byStatus.rejected
-      .filter((post) => (category === "all" ? true : post.category === category))
       .filter((post) => (reason === "all" ? true : post.rejectionReason === reason))
-      .filter((post) => (query ? post.content.toLowerCase().includes(query) : true))
+      .filter((post) =>
+        query
+          ? post.content.toLowerCase().includes(query) ||
+            (post.recipient ?? "").toLowerCase().includes(query)
+          : true
+      )
       .sort((a, b) => new Date(b.reviewedAt ?? 0) - new Date(a.reviewedAt ?? 0));
-  }, [byStatus.rejected, category, reason, search]);
+  }, [byStatus.rejected, reason, search]);
 
   const detailPost = byStatus.rejected.find((p) => p.id === detailId) ?? null;
-  const filtersActive = search.trim().length > 0 || category !== "all" || reason !== "all";
+  const filtersActive = search.trim().length > 0 || reason !== "all";
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -41,18 +44,8 @@ export default function RejectedPosts() {
       <AdminToolbar
         search={search}
         onSearch={setSearch}
-        searchPlaceholder="Search rejected posts..."
+        searchPlaceholder="Search notes or a recipient..."
         selects={[
-          {
-            id: "category",
-            label: "Filter by category",
-            value: category,
-            onChange: setCategory,
-            options: [
-              { value: "all", label: "All categories" },
-              ...POST_CATEGORIES.map((c) => ({ value: c.id, label: c.label })),
-            ],
-          },
           {
             id: "reason",
             label: "Filter by reason",
@@ -69,7 +62,6 @@ export default function RejectedPosts() {
         filtersActive={filtersActive}
         onReset={() => {
           setSearch("");
-          setCategory("all");
           setReason("all");
         }}
       />
@@ -90,7 +82,6 @@ export default function RejectedPosts() {
                 variant="secondary"
                 onClick={() => {
                   setSearch("");
-                  setCategory("all");
                   setReason("all");
                 }}
               >

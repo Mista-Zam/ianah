@@ -78,11 +78,15 @@ export default function SiteHeader({ onShare }) {
         </nav>
 
         <div className="ml-auto flex items-center gap-2 md:ml-4">
-          <Button variant="primary" size="sm" onClick={onShare} className="hidden sm:inline-flex">
+          {/* `max-sm:hidden` rather than `hidden sm:inline-flex`: Button's base sets
+              `inline-flex`, and among two display utilities the one later in the
+              generated stylesheet wins — not the one later in the class attribute.
+              A max-width variant is emitted after the base, so it actually hides. */}
+          <Button variant="primary" size="sm" onClick={onShare} className="max-sm:hidden">
             <Plus size={15} aria-hidden="true" />
             Write a Note
           </Button>
-          <Button variant="primary" size="sm" onClick={onShare} className="sm:hidden">
+          <Button variant="primary" size="sm" onClick={onShare} className="max-sm:h-11 sm:hidden">
             <Plus size={15} aria-hidden="true" />
             Post
           </Button>
@@ -186,7 +190,7 @@ export default function SiteHeader({ onShare }) {
                       {profile?.display_name || user.email}
                     </span>
                     <span className="block text-[0.6875rem] text-faint">
-                      {isAdmin ? "Moderator" : "Student"}
+                      Moderator
                     </span>
                   </span>
                 </span>
@@ -208,7 +212,7 @@ export default function SiteHeader({ onShare }) {
                 onClick={() => setMenuOpen(false)}
                 className="block rounded-lg border border-line bg-surface-2 px-4 py-3 text-center text-sm font-semibold text-muted"
               >
-                Sign in or create an account
+                Moderator sign in
               </Link>
             )}
           </div>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Flag } from "lucide-react";
-import { colorById, CATEGORY_LABEL } from "../../lib/constants";
+import { colorById } from "../../lib/constants";
 import { truncate } from "../../lib/format";
 
 const SIZE_CLASS = {
@@ -55,7 +55,11 @@ export default function StickyNote({ post, onOpen, onReport, className = "", int
       </p>
 
       <div className="note-meta">
-        <span className="note-tag">{CATEGORY_LABEL[post.category] ?? "Random"}</span>
+        {post.recipient && (
+          <span className="note-tag" title={`For ${post.recipient}`}>
+            For {post.recipient}
+          </span>
+        )}
         {interactive && (
           <div className="relative z-20" ref={menuRef}>
             <button
@@ -64,7 +68,7 @@ export default function StickyNote({ post, onOpen, onReport, className = "", int
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               aria-label={`More actions for this note: ${truncate(post.content, 60)}`}
-              className="-mr-1.5 -mt-1.5 rounded-md px-2 py-1 text-[0.9rem] leading-none tracking-[0.2em] transition hover:bg-black/10"
+              className="-mr-2 -mt-2 min-h-8 rounded-md px-2 py-1.5 text-[0.9rem] leading-none tracking-[0.2em] transition hover:bg-black/10"
             >
               •••
             </button>

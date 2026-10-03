@@ -6,10 +6,10 @@ import {
   Eye,
   EyeOff,
   Loader2,
+  Lock,
   LogIn,
   Mail,
   ShieldCheck,
-  UserPlus,
 } from "lucide-react";
 import Button from "../../components/ui/Button";
 import { useWall } from "../../store/wallContext";
@@ -29,7 +29,7 @@ import { BRAND } from "../../lib/constants";
  * or file a report.
  */
 export default function AdminLogin() {
-  const { isAdmin, session, authReady, signIn, isConfigured } = useWall();
+  const { isAdmin, session, authReady, signIn, signOut, isConfigured } = useWall();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,8 +43,16 @@ export default function AdminLogin() {
 
   if (isAdmin) return <Navigate to="/admin/dashboard" replace />;
 
-  // Already signed in as a student: there is nothing to do here.
-  if (authReady && session && !isAdmin) return <Navigate to="/" replace />;
+  /* Already signed in but not a moderator: nowhere to go from here.
+   *
+   * The `!busy` guard is load-bearing. Between signInWithPassword resolving and
+   * getCurrentProfile returning there is a window where `session` is already set
+   * but `isAdmin` is still false. Without this guard the redirect below fires
+   * inside that window: a moderator gets flashed the public home page on the way
+   * to the dashboard, and a student is bounced to "/" mid-request, which unmounts
+   * this form and throws away the "That account is not a moderator" message before
+   * anyone can read it. Both were reproduced in a browser session. */
+  if (authReady && session && !isAdmin && !busy) return <Navigate to="/" replace />;
 
   const submit = async (event) => {
     event.preventDefault();
@@ -58,8 +66,15 @@ export default function AdminLogin() {
     setBusy(true);
     try {
       const profile = await signIn(email, password);
-      // A student keeps their session; only the destination differs.
-      navigate(profile?.role === "admin" ? "/admin/dashboard" : "/", { replace: true });
+      if (profile?.role !== "admin") {
+        /* Nobody but a moderator has anything to do here. The account may still be
+         * perfectly valid, so say so plainly and drop the session rather than
+         * leaving a signed-in non-moderator holding a token. */
+        await signOut();
+        setError("That account is not a moderator. Sign in with a moderator account.");
+        return;
+      }
+      navigate("/admin/dashboard", { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -179,10 +194,10 @@ export default function AdminLogin() {
           </Button>
 
           <div className="flex items-center justify-between text-xs">
-            <Link to="/admin/signup" className="inline-flex items-center gap-1.5 font-semibold text-brand-soft transition hover:text-brand">
-              <UserPlus size={13} aria-hidden="true" />
-              Create an account
-            </Link>
+            <span className="inline-flex items-center gap-1.5 text-faint">
+              <Lock size={13} aria-hidden="true" />
+              Moderator accounts only
+            </span>
             <Link to="/" className="text-faint transition hover:text-fg-soft">
               Public wall
             </Link>
@@ -191,9 +206,9 @@ export default function AdminLogin() {
       </div>
 
       <p className="mt-5 w-full max-w-md rounded-xl border border-line-soft bg-surface-2/70 px-4 py-3 text-xs leading-relaxed text-faint">
-        Students can sign in to post notes and report content. Moderator access to the console is granted by an
-        existing administrator. Your email and password are verified by Supabase Auth — nothing is stored in this
-        browser.
+        This console is for moderators only. Everyone else can use the wall without an account — reading,
+        writing a note and reporting content all need no sign-in. Your email and password are verified by
+        Supabase Auth, and nothing is stored in this browser.
       </p>
     </div>
   );

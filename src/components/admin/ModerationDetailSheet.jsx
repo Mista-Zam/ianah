@@ -1,13 +1,13 @@
-import { CalendarClock, Flag, ShieldCheck, Tag, UserRound } from "lucide-react";
+import { CalendarClock, Flag, HeartHandshake, ShieldCheck, UserRound } from "lucide-react";
 import Modal from "../ui/Modal";
 import Button from "../ui/Button";
 import NotePreview from "../NotePreview";
 import StatusBadge from "../ui/StatusBadge";
-import { CATEGORY_LABEL, STATUS } from "../../lib/constants";
+import { STATUS } from "../../lib/constants";
 import { formatDateTime, formatLongDate } from "../../lib/format";
 
 const FIELDS = [
-  { key: "category", label: "Category", icon: Tag },
+  { key: "recipient", label: "For", icon: HeartHandshake },
   { key: "author", label: "Author", icon: UserRound },
   { key: "submitted", label: "Submitted", icon: CalendarClock },
   { key: "status", label: "Status", icon: ShieldCheck },
@@ -15,8 +15,8 @@ const FIELDS = [
 
 function fieldValue(post, key) {
   switch (key) {
-    case "category":
-      return CATEGORY_LABEL[post.category] ?? "Random";
+    case "recipient":
+      return post.recipient ?? "Everyone";
     case "author":
       return post.anonymous ? "Anonymous" : "Named student";
     case "submitted":
@@ -40,7 +40,7 @@ export default function ModerationDetailSheet({ post, open, onClose, onApprove, 
       open={open}
       onClose={onClose}
       title="Moderation detail"
-      eyebrow={CATEGORY_LABEL[post.category] ?? "Random"}
+      eyebrow={post.recipient ? `For ${post.recipient}` : "For everyone"}
       size="lg"
       footer={
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

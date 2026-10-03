@@ -38,7 +38,21 @@ export function WallProvider({ children }) {
   /* ------------------------------ session -------------------------------- */
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [authReady, setAuthReady] = useState(!isConfigured);
+  // `sessionReady` means Supabase has answered whether anyone is signed in.
+  // `roleReady` additionally means we have read that user's profiles.role.
+  //
+  // These are two different moments, and treating them as one locks real
+  // moderators out of their own console. On a hard refresh or a direct link the
+  // session resolves first, so for a few milliseconds we hold
+  // { session: admin, profile: null } -> isAdmin === false. A guard that trusts
+  // the session flag alone reads that gap as "signed in, not a moderator" and
+  // redirects to the login page, which then bounces to "/" as a non-moderator.
+  // The role lands a moment later, on a page the moderator is no longer on.
+  //
+  // Authorisation is exported as `authReady`, and it stays false until the role
+  // is actually known. Nothing may decide access before that.
+  const [sessionReady, setSessionReady] = useState(!isConfigured);
+  const [roleReady, setRoleReady] = useState(!isConfigured);
 
   /* -------------------------------- data --------------------------------- */
   const [posts, setPosts] = useState([]);
@@ -136,13 +150,13 @@ export function WallProvider({ children }) {
     supabase.auth.getSession().then(({ data }) => {
       if (!active) return;
       setSession(data.session ?? null);
-      setAuthReady(true);
+      setSessionReady(true);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => {
       if (!active) return;
       setSession(next ?? null);
-      setAuthReady(true);
+      setSessionReady(true);
     });
 
     return () => {
@@ -152,26 +166,38 @@ export function WallProvider({ children }) {
   }, []);
 
   // Role lives in Postgres, so re-read the profile whenever the session changes.
+  // `roleReady` is cleared for the duration of the read: a moderator must never
+  // be judged as "not an admin" while their own role is still in flight.
   useEffect(() => {
     let active = true;
+    // Wait for Supabase to tell us whether anyone is signed in at all. Without this
+    // guard the `!session` branch below runs on the very first render -- when the
+    // session has not loaded yet, not when there is no session -- and marks the
+    // role as resolved while it is still unknown. The guard then reads
+    // "resolved, not an admin" and redirects a real moderator to the login page.
+    if (!sessionReady) return undefined;
     if (!session) {
       setProfile(null);
+      setRoleReady(true);
       return undefined;
     }
+    setRoleReady(false);
     authDb.getCurrentProfile().then((next) => {
-      if (active) setProfile(next);
+      if (!active) return;
+      setProfile(next);
+      setRoleReady(true);
     });
     return () => {
       active = false;
     };
-  }, [session]);
+  }, [session, sessionReady]);
 
   /* ------------------------- data on auth change ------------------------- */
 
   useEffect(() => {
-    if (!authReady) return;
+    if (!roleReady) return;
     refresh();
-  }, [authReady, isAdmin, refresh]);
+  }, [roleReady, isAdmin, refresh]);
 
   /* ------------------------------ realtime ------------------------------- */
 
@@ -384,25 +410,6 @@ export function WallProvider({ children }) {
     [notify]
   );
 
-  const signUp = useCallback(
-    async ({ email, password, displayName }) => {
-      const { session: nextSession, user } = await authDb.signUpWithPassword({
-        email,
-        password,
-        displayName,
-      });
-      if (!nextSession) {
-        notify("Check your inbox to confirm your email, then sign in.", "info");
-        return null;
-      }
-      const nextProfile = await authDb.getCurrentProfile();
-      setProfile(nextProfile);
-      notify(`Welcome, ${displayName || user.email}`, "success");
-      return nextProfile;
-    },
-    [notify]
-  );
-
   const signOut = useCallback(async () => {
     await authDb.signOut();
     setProfile(null);
@@ -434,9 +441,12 @@ export function WallProvider({ children }) {
       profile,
       isAdmin,
       isConfigured,
-      authReady,
+      // Deliberately the ROLE-aware flag, not the session one. Any component that
+      // gates on `authReady` is asking "may this visitor use the console?", and
+      // that is only answerable once profiles.role has been read.
+      authReady: roleReady,
+      sessionReady,
       signIn,
-      signUp,
       signOut,
     }),
     [
@@ -456,9 +466,9 @@ export function WallProvider({ children }) {
       session,
       profile,
       isAdmin,
-      authReady,
+      roleReady,
+      sessionReady,
       signIn,
-      signUp,
       signOut,
     ]
   );

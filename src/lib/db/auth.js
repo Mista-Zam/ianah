@@ -56,25 +56,6 @@ export async function signInWithPassword(email, password) {
   return result.data;
 }
 
-/**
- * Register a student. `display_name` travels as signup metadata purely so the
- * trigger can seed the profile — handle_new_user discards any `role` in it.
- */
-export async function signUpWithPassword({ email, password, displayName }) {
-  if (!isConfigured) throw new Error("Supabase is not configured.");
-
-  const result = await supabase.auth.signUp({
-    email: email.trim().toLowerCase(),
-    password,
-    options: {
-      data: { display_name: displayName?.trim() || null },
-      emailRedirectTo: window.location.origin,
-    },
-  });
-  if (result.error) throw new Error(authMessage(result.error.message, "sign up"));
-  return result.data;
-}
-
 export async function sendPasswordReset(email) {
   if (!isConfigured) throw new Error("Supabase is not configured.");
 

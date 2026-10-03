@@ -8,13 +8,11 @@ import RejectDialog from "../../components/admin/RejectDialog";
 import Button from "../../components/ui/Button";
 import EmptyState from "../../components/ui/EmptyState";
 import { useWall } from "../../store/wallContext";
-import { POST_CATEGORIES } from "../../lib/constants";
 import { pluralize } from "../../lib/format";
 
 export default function PendingPosts() {
   const { byStatus, actions } = useWall();
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("all");
   const [order, setOrder] = useState("oldest");
   const [selected, setSelected] = useState([]);
   const [detailId, setDetailId] = useState(null);
@@ -24,20 +22,24 @@ export default function PendingPosts() {
   const pending = useMemo(() => {
     const query = search.trim().toLowerCase();
     const filtered = byStatus.pending.filter((post) => {
-      const matchesCategory = category === "all" || post.category === category;
-      const matchesQuery = !query || post.content.toLowerCase().includes(query);
-      return matchesCategory && matchesQuery;
+      if (!query) return true;
+      // Search the recipient alongside the note text, so a moderator can pull
+      // everything addressed to one teacher by typing their name.
+      return (
+        post.content.toLowerCase().includes(query) ||
+        (post.recipient ?? "").toLowerCase().includes(query)
+      );
     });
     return filtered.sort((a, b) =>
       order === "oldest"
         ? new Date(a.submittedAt) - new Date(b.submittedAt)
         : new Date(b.submittedAt) - new Date(a.submittedAt)
     );
-  }, [byStatus.pending, search, category, order]);
+  }, [byStatus.pending, search, order]);
 
   const detailPost = byStatus.pending.find((p) => p.id === detailId) ?? null;
   const allSelected = pending.length > 0 && pending.every((p) => selected.includes(p.id));
-  const filtersActive = search.trim().length > 0 || category !== "all";
+  const filtersActive = search.trim().length > 0;
 
   const toggle = (id) =>
     setSelected((current) =>
@@ -81,18 +83,8 @@ export default function PendingPosts() {
       <AdminToolbar
         search={search}
         onSearch={setSearch}
-        searchPlaceholder="Search pending posts..."
+        searchPlaceholder="Search notes or a recipient..."
         selects={[
-          {
-            id: "category",
-            label: "Filter by category",
-            value: category,
-            onChange: setCategory,
-            options: [
-              { value: "all", label: "All categories" },
-              ...POST_CATEGORIES.map((c) => ({ value: c.id, label: c.label })),
-            ],
-          },
           {
             id: "order",
             label: "Sort order",
@@ -109,7 +101,6 @@ export default function PendingPosts() {
         filtersActive={filtersActive}
         onReset={() => {
           setSearch("");
-          setCategory("all");
         }}
         actions={
           selected.length > 0 ? (
@@ -151,7 +142,6 @@ export default function PendingPosts() {
                 variant="secondary"
                 onClick={() => {
                   setSearch("");
-                  setCategory("all");
                 }}
               >
                 Reset filters

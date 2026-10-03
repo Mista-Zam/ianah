@@ -7,7 +7,6 @@ import ConfirmDialog from "../../components/admin/ConfirmDialog";
 import Button from "../../components/ui/Button";
 import EmptyState from "../../components/ui/EmptyState";
 import { useWall } from "../../store/wallContext";
-import { CATEGORY_LABEL, POST_CATEGORIES } from "../../lib/constants";
 
 /* "Archived" is gone: hiding a note is `removed`, and restoring it is a single
    action rather than a third bucket. See the post_status enum in 0001. */
@@ -19,7 +18,6 @@ const VIEWS = [
 export default function PublishedPosts() {
   const { byStatus, actions, counts } = useWall();
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("all");
   const [view, setView] = useState("published");
   const [detailId, setDetailId] = useState(null);
   const [removeTarget, setRemoveTarget] = useState(null);
@@ -33,13 +31,17 @@ export default function PublishedPosts() {
     const query = search.trim().toLowerCase();
     return source
       .filter((post) => post.status === view)
-      .filter((post) => (category === "all" ? true : post.category === category))
-      .filter((post) => (query ? post.content.toLowerCase().includes(query) : true))
+      .filter((post) =>
+        query
+          ? post.content.toLowerCase().includes(query) ||
+            (post.recipient ?? "").toLowerCase().includes(query)
+          : true
+      )
       .sort((a, b) => new Date(b.publishedAt ?? b.removedAt ?? 0) - new Date(a.publishedAt ?? a.removedAt ?? 0));
-  }, [source, view, category, search]);
+  }, [source, view, search]);
 
   const detailPost = source.find((p) => p.id === detailId) ?? null;
-  const filtersActive = search.trim().length > 0 || category !== "all" || view !== "published";
+  const filtersActive = search.trim().length > 0 || view !== "published";
 
   // Actions report their own outcome through the store's toasts, so these stay
   // silent here — otherwise every moderation click logs the message twice.
@@ -93,25 +95,13 @@ export default function PublishedPosts() {
       <AdminToolbar
         search={search}
         onSearch={setSearch}
-        searchPlaceholder="Search published posts..."
-        selects={[
-          {
-            id: "category",
-            label: "Filter by category",
-            value: category,
-            onChange: setCategory,
-            options: [
-              { value: "all", label: "All categories" },
-              ...POST_CATEGORIES.map((c) => ({ value: c.id, label: c.label })),
-            ],
-          },
-        ]}
+        searchPlaceholder="Search notes or a recipient..."
+        selects={[]}
         resultCount={posts.length}
         total={source.length}
         filtersActive={filtersActive}
         onReset={() => {
           setSearch("");
-          setCategory("all");
           setView("published");
         }}
       />
@@ -134,7 +124,6 @@ export default function PublishedPosts() {
                 variant="secondary"
                 onClick={() => {
                   setSearch("");
-                  setCategory("all");
                   setView("published");
                 }}
               >
@@ -151,7 +140,8 @@ export default function PublishedPosts() {
               post={post}
               detail={
                 <span className="text-[0.6875rem] text-faint">
-                  {CATEGORY_LABEL[post.category]} &middot; {post.anonymous ? "Anonymous" : "Named"}
+                  {post.recipient ? `For ${post.recipient}` : "For everyone"} &middot;{" "}
+                  {post.anonymous ? "Anonymous" : "Named"}
                 </span>
               }
               actions={

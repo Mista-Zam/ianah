@@ -1,6 +1,5 @@
 import { useOutletContext } from "react-router-dom";
 import FreedomWall from "../components/public/FreedomWall";
-import CommunityStats from "../components/public/CommunityStats";
 
 export default function WallPage() {
   const { openShare, openPost, openReport } = useOutletContext();
@@ -18,10 +17,6 @@ export default function WallPage() {
           Notes here have already passed moderation. Nothing on this wall is published automatically —
           and no student is identified unless they chose to be.
         </p>
-      </div>
-
-      <div className="mt-8">
-        <CommunityStats />
       </div>
 
       <div className="mt-10 sm:mt-12">
